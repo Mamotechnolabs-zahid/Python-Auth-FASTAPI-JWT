@@ -1,9 +1,9 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    mongourl: str  # <-- Add this line
+    postgreSQLurl: str 
     accesstokenexpireminutes: int = 30
-    jwtsecret: str = "Zahid5104"
+    jwtsecret: str
     algorithm: str = "HS256"
 
     class Config:

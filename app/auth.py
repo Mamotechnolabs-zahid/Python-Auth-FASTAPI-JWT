@@ -1,15 +1,16 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.schemas import User, Token
-from app.database import user_collection
-from app.models import user_helper
+from app.schemas import User, Token, UpdateUser
+from fastapi.security import OAuth2PasswordBearer
+from app.database import database
+from app.models import users
 from passlib.context import CryptContext
-from jose import jwt
+from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from app.config import settings
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 def create_access_token(data:dict):
     expire = datetime.utcnow() + timedelta(minutes=settings.accesstokenexpireminutes)
@@ -25,18 +26,45 @@ def get_password_hash(password):
 
 @router.post("/register", response_model=dict)
 async def register(user: User):
-    existing = await user_collection.find_one({"email":user.email})
+    query = users.select().where(users.c.email == user.email)
+    existing = await database.fetch_one(query)
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     hashed_pwd = get_password_hash(user.password)
-    await user_collection.insert_one({"email": user.email, "password": hashed_pwd})
+    query = users.insert().values(email=user.email, password=hashed_pwd)
+    await database.execute(query)
+    #user_collection.insert_one({"email": user.email, "password": hashed_pwd})
     return {"msg": "User registered Successfully"}
 
 @router.post("/login", response_model=Token)
 async def login(user: User):
-    db_user = await user_collection.find_one({"email": user.email})
+    query = users.select().where(users.c.email == user.email)
+    db_user = await database.fetch_one(query)
+    # db_user = await user_collection.find_one({"email": user.email})
     if not db_user or not verify_password(user.password, db_user["password"]):
         raise HTTPException(status_code=401, detail="Invalid Credentials")
     token = create_access_token({"sub": user.email})
     return {"access_token": token, "token_type": "bearer"}
 
+@router.put("/update-user", response_model=dict)
+async def update_user(update: UpdateUser, token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, settings.jwtsecret, algorithms=[settings.algorithm])
+        user_email = payload.get("sub")
+        query = users.select().where(users.c.email == user_email)
+        db_user = await database.fetch_one(query)
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        update_data={}
+        if update.email:
+            update_data["email"] = update.email
+        if update.password:
+            update_data["password"] = get_password_hash(update.password)
+
+        update_query = users.update().where(users.c.email == user_email).values(**update_data)
+        await database.execute(update_query)
+
+        return {"msg": "User updated successfully"}
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid Token")    
