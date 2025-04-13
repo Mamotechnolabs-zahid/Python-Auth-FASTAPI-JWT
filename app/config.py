@@ -10,3 +10,5 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 settings = Settings()
+
+print(settings.postgreSQLurl) 

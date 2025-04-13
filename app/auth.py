@@ -67,4 +67,46 @@ async def update_user(update: UpdateUser, token: str = Depends(oauth2_scheme)):
 
         return {"msg": "User updated successfully"}
     except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid Token")    
+        raise HTTPException(status_code=401, detail="Invalid Token")
+
+@router.delete("/delete-user", response_model=dict)
+async def delete_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, settings.jwtsecret, algorithms=[settings.algorithm])
+        user_email = payload.get("sub")
+        query = users.select().where(users.c.email == user_email)
+        db_user = database.fetch_one(query)
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        delete_query = users.delete().where(users.c.email == user_email)
+        await database.execute(delete_query)
+
+        return {"msg": "User deleted Successfully"}
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+@router.get("/users", response_model=list[dict])
+async def get_all_users(token: str= Depends(oauth2_scheme)):
+    try:
+        jwt.decode(token, settings.jwtsecret, algorithms=[settings.algorithm])
+        query = users.select()
+        all_users = await database.fetch_all(query)
+        return [{"email": u["email"]} for u in all_users]
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid Token")
+
+@router.get("/me", response_model=dict)
+async def get_me(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, settings.jwtsecret, algorithms=[settings.algorithm])
+        user_email = payload.get("sub")
+        query = users.select().where(users.c.email == user_email)
+        db_user = await database.fetch_one(query)
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return {"email": db_user["email"]}
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid Token")
+
+    

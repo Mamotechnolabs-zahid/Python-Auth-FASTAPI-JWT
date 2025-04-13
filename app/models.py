@@ -5,7 +5,7 @@ users = Table(
     "users",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("email", Integer, unique=True, index=True),
+    Column("email", String, unique=True, index=True),
     Column("password", String)
 )
 
